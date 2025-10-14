@@ -39,6 +39,11 @@ bindings = "pyo3"
 python-source = "."
 manifest-path = "rustbpe/Cargo.toml"
 
+[project.optional-dependencies]
+mlx = [
+    "mlx>=0.20.0",
+]
+
 [dependency-groups]
 dev = [
     "maturin>=1.9.4",
