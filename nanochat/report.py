@@ -10,7 +10,13 @@ import socket
 import datetime
 import platform
 import psutil
-import torch
+
+from nanochat.common import BACKEND
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+else:
+    import torch
 
 def run_command(cmd):
     """Run a shell command and return output, or None if it fails."""

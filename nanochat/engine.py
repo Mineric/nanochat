@@ -11,14 +11,20 @@ Notes:
 The whole thing is made as efficient as possible.
 """
 
-import torch
-import torch.nn.functional as F
 import signal
 import warnings
 from contextlib import contextmanager
 from collections import deque
-from nanochat.common import compute_init
+
+from nanochat.common import BACKEND, compute_init
 from nanochat.checkpoint_manager import load_model
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+    from nanochat.mlx_compat import F
+else:
+    import torch
+    import torch.nn.functional as F
 
 # -----------------------------------------------------------------------------
 # Calculator tool helpers

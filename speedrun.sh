@@ -22,8 +22,12 @@ mkdir -p $NANOCHAT_BASE_DIR
 command -v uv &> /dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
 # create a .venv local virtual environment (if it doesn't exist)
 [ -d ".venv" ] || uv venv
-# install the repo dependencies
-uv sync
+# install the repo dependencies (with MLX on macOS, PyTorch on Linux)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    uv sync --extra mlx
+else
+    uv sync --extra pytorch
+fi
 # activate venv so that `python` uses the project's venv instead of system python
 source .venv/bin/activate
 

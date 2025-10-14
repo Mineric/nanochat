@@ -1025,14 +1025,28 @@ def inference_mode():
         return wrapper
     return decorator
 
-def no_grad():
-    """No-op context for no gradient computation."""
-    class NoGrad:
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            pass
-    return NoGrad()
+class no_grad:
+    """No-op context manager and decorator for no gradient computation."""
+    def __init__(self, func=None):
+        self.func = func
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def __call__(self, *args, **kwargs):
+        if self.func is None:
+            # Being used as @no_grad() with parentheses
+            if len(args) == 1 and callable(args[0]) and not kwargs:
+                # Return a new no_grad instance wrapping the function
+                return no_grad(args[0])
+            else:
+                raise TypeError("no_grad() takes no arguments")
+        else:
+            # Being used to call the wrapped function
+            return self.func(*args, **kwargs)
 
 def enable_grad():
     """No-op context for enabling gradients."""
