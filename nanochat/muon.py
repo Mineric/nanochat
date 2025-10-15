@@ -2,9 +2,16 @@
 Muon optimizer from Keller et al.
 Also a lot of borrowing of ideas from modded-nanogpt.
 """
-import torch
-from torch import Tensor
-import torch.distributed as dist
+from nanochat.common import BACKEND
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+    dist = None
+    Tensor = torch.Tensor
+else:
+    import torch
+    from torch import Tensor
+    import torch.distributed as dist
 
 @torch.compile
 def zeropower_via_newtonschulz5(G: Tensor, steps: int) -> Tensor:

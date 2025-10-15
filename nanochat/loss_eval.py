@@ -2,8 +2,16 @@
 A number of functions that help with evaluating a base model.
 """
 import math
-import torch
-import torch.distributed as dist
+
+from nanochat.common import BACKEND
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+    # MLX doesn't have distributed training
+    dist = None
+else:
+    import torch
+    import torch.distributed as dist
 
 @torch.no_grad()
 def evaluate_bpb(model, batches, steps, token_bytes):
@@ -52,10 +60,14 @@ def evaluate_bpb(model, batches, steps, token_bytes):
             total_nats += (loss2d * (num_bytes2d > 0)).sum()
             total_bytes += num_bytes2d.sum()
     # sum reduce across all ranks
-    world_size = dist.get_world_size() if dist.is_initialized() else 1
-    if world_size > 1:
-        dist.all_reduce(total_nats, op=dist.ReduceOp.SUM)
-        dist.all_reduce(total_bytes, op=dist.ReduceOp.SUM)
+    if BACKEND == "mlx":
+        # MLX doesn't support distributed training
+        world_size = 1
+    else:
+        world_size = dist.get_world_size() if dist.is_initialized() else 1
+        if world_size > 1:
+            dist.all_reduce(total_nats, op=dist.ReduceOp.SUM)
+            dist.all_reduce(total_bytes, op=dist.ReduceOp.SUM)
     # move both to cpu, calculate bpb and return
     total_nats = total_nats.item()
     total_bytes = total_bytes.item()

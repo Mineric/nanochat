@@ -22,8 +22,12 @@ mkdir -p $NANOCHAT_BASE_DIR
 command -v uv &> /dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
 # create a .venv local virtual environment (if it doesn't exist)
 [ -d ".venv" ] || uv venv
-# install the repo dependencies
-uv sync
+# install the repo dependencies (with MLX on macOS, PyTorch on Linux)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    uv sync --extra mlx
+else
+    uv sync --extra pytorch
+fi
 # activate venv so that `python` uses the project's venv instead of system python
 source .venv/bin/activate
 
@@ -91,26 +95,56 @@ fi
 echo "Waiting for dataset download to complete..."
 wait $DATASET_DOWNLOAD_PID
 
-# pretrain the d20 model
-torchrun --standalone --nproc_per_node=8 -m scripts.base_train -- --depth=20 --run=$WANDB_RUN
-# evaluate the model on a larger chunk of train/val data and draw some samples
-torchrun --standalone --nproc_per_node=8 -m scripts.base_loss
-# evaluate the model on CORE tasks
-torchrun --standalone --nproc_per_node=8 -m scripts.base_eval
+# Detect platform and use appropriate training command
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS: Use MLX backend (single device, no torchrun)
+    echo "Detected macOS - using MLX backend (single device)"
 
-# -----------------------------------------------------------------------------
-# Midtraining (teach the model conversation special tokens, tool use, multiple choice)
+    # pretrain the d20 model
+    python -m scripts.base_train -- --depth=20 --run=$WANDB_RUN
+    # evaluate the model on a larger chunk of train/val data and draw some samples
+    python -m scripts.base_loss
+    # evaluate the model on CORE tasks
+    python -m scripts.base_eval
 
-# run midtraining and eval the model
-torchrun --standalone --nproc_per_node=8 -m scripts.mid_train -- --run=$WANDB_RUN
-torchrun --standalone --nproc_per_node=8 -m scripts.chat_eval -- -i mid
+    # -----------------------------------------------------------------------------
+    # Midtraining (teach the model conversation special tokens, tool use, multiple choice)
 
-# -----------------------------------------------------------------------------
-# Supervised Finetuning (domain adaptation to each sequence all by itself per row)
+    # run midtraining and eval the model
+    python -m scripts.mid_train -- --run=$WANDB_RUN
+    python -m scripts.chat_eval -- -i mid
 
-# train sft and re-eval right away (should see a small bump)
-torchrun --standalone --nproc_per_node=8 -m scripts.chat_sft -- --run=$WANDB_RUN
-torchrun --standalone --nproc_per_node=8 -m scripts.chat_eval -- -i sft
+    # -----------------------------------------------------------------------------
+    # Supervised Finetuning (domain adaptation to each sequence all by itself per row)
+
+    # train sft and re-eval right away (should see a small bump)
+    python -m scripts.chat_sft -- --run=$WANDB_RUN
+    python -m scripts.chat_eval -- -i sft
+else
+    # Linux/Windows: Use PyTorch + CUDA (multi-GPU with torchrun)
+    echo "Detected Linux - using PyTorch backend (multi-GPU)"
+
+    # pretrain the d20 model
+    torchrun --standalone --nproc_per_node=8 -m scripts.base_train -- --depth=20 --run=$WANDB_RUN
+    # evaluate the model on a larger chunk of train/val data and draw some samples
+    torchrun --standalone --nproc_per_node=8 -m scripts.base_loss
+    # evaluate the model on CORE tasks
+    torchrun --standalone --nproc_per_node=8 -m scripts.base_eval
+
+    # -----------------------------------------------------------------------------
+    # Midtraining (teach the model conversation special tokens, tool use, multiple choice)
+
+    # run midtraining and eval the model
+    torchrun --standalone --nproc_per_node=8 -m scripts.mid_train -- --run=$WANDB_RUN
+    torchrun --standalone --nproc_per_node=8 -m scripts.chat_eval -- -i mid
+
+    # -----------------------------------------------------------------------------
+    # Supervised Finetuning (domain adaptation to each sequence all by itself per row)
+
+    # train sft and re-eval right away (should see a small bump)
+    torchrun --standalone --nproc_per_node=8 -m scripts.chat_sft -- --run=$WANDB_RUN
+    torchrun --standalone --nproc_per_node=8 -m scripts.chat_eval -- -i sft
+fi
 
 # chat with the model over CLI! Leave out the -p to chat interactively
 # python -m scripts.chat_cli -p "Why is the sky blue?"

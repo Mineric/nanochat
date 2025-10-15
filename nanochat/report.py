@@ -10,7 +10,13 @@ import socket
 import datetime
 import platform
 import psutil
-import torch
+
+from nanochat.common import BACKEND
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+else:
+    import torch
 
 def run_command(cmd):
     """Run a shell command and return output, or None if it fails."""
@@ -272,6 +278,7 @@ class Report:
         final_metrics = {} # the most important final metrics we'll add as table at the end
         start_time = None
         end_time = None
+        bloat_data = ""  # Initialize bloat_data
         with open(report_file, "w") as out_file:
             # write the header first
             header_file = os.path.join(report_dir, "header.md")
@@ -281,8 +288,8 @@ class Report:
                     out_file.write(header_content)
                     start_time = extract_timestamp(header_content, "Run started:")
                     # capture bloat data for summary later (the stuff after Bloat header and until \n\n)
-                    bloat_data = re.search(r"### Bloat\n(.*?)\n\n", header_content, re.DOTALL)
-                    bloat_data = bloat_data.group(1) if bloat_data else ""
+                    bloat_data_match = re.search(r"### Bloat\n(.*?)\n\n", header_content, re.DOTALL)
+                    bloat_data = bloat_data_match.group(1) if bloat_data_match else ""
             # process all the individual sections
             for file_name in EXPECTED_FILES:
                 section_file = os.path.join(report_dir, file_name)

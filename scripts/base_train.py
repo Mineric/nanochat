@@ -9,10 +9,17 @@ torchrun --nproc_per_node=8 base_train.py
 """
 
 import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+import sys
 import time
 import wandb
-import torch
+
+# Backend detection - import torch from appropriate backend
+from nanochat.common import BACKEND
+if BACKEND == "pytorch":
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    import torch
+else:
+    import nanochat.mlx_compat as torch
 
 from nanochat.gpt import GPT, GPTConfig
 from nanochat.dataloader import tokenizing_distributed_data_loader
@@ -59,7 +66,14 @@ user_config = {k: globals()[k] for k in config_keys} # will be useful for loggin
 # Compute init
 ddp, ddp_rank, ddp_local_rank, ddp_world_size, device = compute_init()
 master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
-autocast_ctx = torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16)
+
+# Autocast context (backend-aware)
+if BACKEND == "pytorch":
+    autocast_ctx = torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16)
+else:
+    # MLX doesn't need autocast (automatic mixed precision)
+    from contextlib import nullcontext
+    autocast_ctx = nullcontext()
 
 # wandb logging init
 use_dummy_wandb = run == "dummy" or not master_process
@@ -93,13 +107,24 @@ print0(f"Total batch size {total_batch_size:,} => gradient accumulation steps: {
 # -----------------------------------------------------------------------------
 # Initialize the Model
 model_config_kwargs = dict(sequence_len=max_seq_len, vocab_size=vocab_size, n_layer=num_layers, n_head=num_heads, n_kv_head=num_kv_heads, n_embd=model_dim)
-with torch.device("meta"):
+
+if BACKEND == "pytorch":
+    with torch.device("meta"):
+        model_config = GPTConfig(**model_config_kwargs)
+        model = GPT(model_config)
+    model.to_empty(device="cuda")
+else:
+    # MLX doesn't support meta device
     model_config = GPTConfig(**model_config_kwargs)
     model = GPT(model_config)
-model.to_empty(device="cuda")
+
 model.init_weights()
 orig_model = model # original, uncompiled model, for saving raw model state_dict
-model = torch.compile(model, dynamic=False) # TODO: dynamic True/False think through
+
+# Compile model (PyTorch only - MLX auto-compiles)
+if BACKEND == "pytorch":
+    model = torch.compile(model, dynamic=False)
+# else: MLX auto-compiles via JIT, no action needed
 num_params = sum(p.numel() for p in model.parameters())
 print0(f"Number of parameters: {num_params:,}")
 num_flops_per_token = model.estimate_flops()

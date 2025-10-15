@@ -11,17 +11,25 @@ torchrun --standalone --nproc_per_node=8 -m scripts.mid_train -- --device_batch_
 
 from collections import deque
 import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+import sys
 import time
 import wandb
-import torch
+
+# Backend detection - import torch from appropriate backend
+from nanochat.common import BACKEND
+if BACKEND == "pytorch":
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    import torch
+    import torch.distributed as dist
+else:
+    import nanochat.mlx_compat as torch
+    dist = None
 
 from nanochat.common import compute_init, compute_cleanup, print0, DummyWandb, get_base_dir
 from nanochat.tokenizer import get_token_bytes
 from nanochat.checkpoint_manager import save_checkpoint
 from nanochat.loss_eval import evaluate_bpb
 from nanochat.checkpoint_manager import load_model
-import torch.distributed as dist
 
 from tasks.common import TaskMixture
 from tasks.gsm8k import GSM8K
@@ -53,7 +61,14 @@ user_config = {k: globals()[k] for k in config_keys} # possibly useful for loggi
 ddp, ddp_rank, ddp_local_rank, ddp_world_size, device = compute_init()
 master_process = ddp_rank == 0
 dtype = torch.float32 if dtype == 'float32' else torch.bfloat16
-autocast_ctx = torch.amp.autocast(device_type="cuda", dtype=dtype)
+
+# Autocast context (backend-aware)
+if BACKEND == "pytorch":
+    autocast_ctx = torch.amp.autocast(device_type="cuda", dtype=dtype)
+else:
+    # MLX doesn't need autocast (automatic mixed precision)
+    from contextlib import nullcontext
+    autocast_ctx = nullcontext()
 
 # wandb logging init
 use_dummy_wandb = run == "dummy" or not master_process
@@ -65,7 +80,11 @@ pretrain_batch_size = meta.get("device_batch_size", None)
 if pretrain_batch_size is not None and device_batch_size > pretrain_batch_size:
     print0(f"FOOTGUN WARNING: base model training used device_batch_size {pretrain_batch_size}, did you pass in a good --device_batch_size to this script?")
 orig_model = model
-model = torch.compile(model, dynamic=False)
+
+# Compile model (PyTorch only - MLX auto-compiles)
+if BACKEND == "pytorch":
+    model = torch.compile(model, dynamic=False)
+# else: MLX auto-compiles via JIT, no action needed
 depth = model.config.n_layer
 num_flops_per_token = model.estimate_flops()
 tokens_per_fwdbwd = device_batch_size * max_seq_len # tokens per iteration for a single rank
@@ -161,7 +180,7 @@ while True:
     flops_so_far = num_flops_per_token * total_batch_size * step
 
     # Synchronize last_step across all ranks to avoid hangs in the distributed setting
-    if ddp:
+    if ddp and BACKEND != "mlx":
         last_step_tensor = torch.tensor(last_step, dtype=torch.int32, device=device)
         dist.all_reduce(last_step_tensor, op=dist.ReduceOp.MAX)
         last_step = bool(last_step_tensor.item())

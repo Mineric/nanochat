@@ -7,8 +7,14 @@ Example run as:
 torchrun --standalone --nproc_per_node=8 -m scripts.base_loss
 """
 import os
-import torch
+
+from nanochat.common import BACKEND
 from nanochat.checkpoint_manager import load_model
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+else:
+    import torch
 from nanochat.common import compute_init, print0, compute_cleanup
 from nanochat.dataloader import tokenizing_distributed_data_loader
 from nanochat.tokenizer import get_token_bytes

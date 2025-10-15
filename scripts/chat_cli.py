@@ -5,8 +5,13 @@ Intended to be run single GPU only atm:
 python -m scripts.chat_cli -i mid
 """
 import argparse
-import torch
-from nanochat.common import compute_init
+
+from nanochat.common import BACKEND, compute_init
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+else:
+    import torch
 from nanochat.engine import Engine
 from nanochat.checkpoint_manager import load_model
 

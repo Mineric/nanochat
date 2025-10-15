@@ -24,9 +24,12 @@ def print0(s="",**kwargs):
         print(s, **kwargs)
 
 for arg in sys.argv[1:]:
+    if arg == '--':
+        # Skip the -- separator used in some command invocations
+        continue
     if '=' not in arg:
         # assume it's the name of a config file
-        assert not arg.startswith('--')
+        assert not arg.startswith('--'), f"Unexpected argument: {arg}"
         config_file = arg
         print0(f"Overriding config with {config_file}:")
         with open(config_file) as f:

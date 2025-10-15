@@ -8,12 +8,17 @@ dependencies = [
     "datasets>=4.0.0",
     "fastapi>=0.117.1",
     "files-to-prompt>=0.6",
+    "jinja2>=3.0.0",
     "numpy==1.26.4",
+    "pandas>=2.0.0",
     "psutil>=7.1.0",
+    "pyarrow>=18.0.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0.0",
     "regex>=2025.9.1",
+    "requests>=2.31.0",
     "tiktoken>=0.11.0",
     "tokenizers>=0.22.0",
-    "torch>=2.8.0",
     "uvicorn>=0.36.0",
     "wandb>=0.21.3",
 ]
@@ -22,10 +27,10 @@ dependencies = [
 requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
-# target torch to cuda 12.8
+# PyTorch for CUDA (Linux/Windows only) - optional on Mac
 [tool.uv.sources]
 torch = [
-    { index = "pytorch-cu128" },
+    { index = "pytorch-cu128", marker = "sys_platform != 'darwin'" },
 ]
 
 [[tool.uv.index]]
@@ -38,6 +43,14 @@ module-name = "rustbpe"
 bindings = "pyo3"
 python-source = "."
 manifest-path = "rustbpe/Cargo.toml"
+
+[project.optional-dependencies]
+mlx = [
+    "mlx>=0.20.0",
+]
+pytorch = [
+    "torch>=2.8.0",
+]
 
 [dependency-groups]
 dev = [

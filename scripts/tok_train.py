@@ -5,9 +5,15 @@ In the style of GPT-4 tokenizer.
 import os
 import time
 import argparse
-import torch
+
+from nanochat.common import BACKEND, get_base_dir
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+else:
+    import torch
+
 from nanochat.tokenizer import RustBPETokenizer
-from nanochat.common import get_base_dir
 from nanochat.dataset import parquets_iter_batched
 
 # -----------------------------------------------------------------------------

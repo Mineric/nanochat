@@ -17,9 +17,13 @@ import random
 import yaml
 
 import pandas as pd
-import torch
 
-from nanochat.common import compute_init, compute_cleanup, print0, get_base_dir
+from nanochat.common import BACKEND, compute_init, compute_cleanup, print0, get_base_dir
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+else:
+    import torch
 from nanochat.tokenizer import HuggingFaceTokenizer
 from nanochat.checkpoint_manager import load_model
 from nanochat.core_eval import evaluate_task

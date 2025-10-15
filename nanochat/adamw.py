@@ -2,9 +2,16 @@
 Borrowed from modded-nanogpt. By Keller, @vagrawal, et al.
 Not a general optimizer! But works for our specific use.
 """
-import torch
-import torch.distributed as dist
-from torch import Tensor
+from nanochat.common import BACKEND
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+    dist = None
+    Tensor = torch.Tensor
+else:
+    import torch
+    import torch.distributed as dist
+    from torch import Tensor
 
 
 class DistAdamW(torch.optim.Optimizer):

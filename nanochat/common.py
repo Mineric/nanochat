@@ -5,8 +5,31 @@ Common utilities for nanochat.
 import os
 import re
 import logging
-import torch
-import torch.distributed as dist
+import sys
+
+# Backend selection: Use MLX on Mac, PyTorch on Linux/Windows
+# Override with NANOCHAT_BACKEND environment variable
+_use_mlx = (
+    sys.platform == "darwin"
+    and os.environ.get("NANOCHAT_BACKEND") != "pytorch"
+    and os.environ.get("NANOCHAT_BACKEND") != "torch"
+)
+
+if _use_mlx:
+    try:
+        import nanochat.mlx_compat as torch
+        import nanochat.mlx_compat as dist  # Mock distributed
+        BACKEND = "mlx"
+    except ImportError:
+        print("WARNING: MLX not found on macOS. Falling back to PyTorch.")
+        print("Install MLX with: uv sync --extra mlx")
+        import torch
+        import torch.distributed as dist
+        BACKEND = "pytorch"
+else:
+    import torch
+    import torch.distributed as dist
+    BACKEND = "pytorch"
 
 class ColoredFormatter(logging.Formatter):
     """Custom formatter that adds colors to log messages."""
@@ -92,38 +115,58 @@ def get_dist_info():
 def compute_init():
     """Basic initialization that we keep doing over and over, so make common."""
 
-    # CUDA is currently required
-    assert torch.cuda.is_available(), "CUDA is needed for a distributed run atm"
+    if BACKEND == "mlx":
+        # MLX backend (Apple Silicon)
+        logger.info("Using MLX backend on Apple Silicon")
 
-    # Reproducibility
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42)
-    # skipping full reproducibility for now, possibly investigate slowdown later
-    # torch.use_deterministic_algorithms(True)
-    # torch.backends.cudnn.deterministic = True
-    # torch.backends.cudnn.benchmark = False
+        # MLX doesn't support distributed training
+        ddp = False
+        ddp_rank = 0
+        ddp_local_rank = 0
+        ddp_world_size = 1
+        device = torch.device("mps")
 
-    # Precision
-    torch.set_float32_matmul_precision("high") # uses tf32 instead of fp32 for matmuls
+        # Reproducibility
+        torch.manual_seed(42)
 
-    # Distributed setup: Distributed Data Parallel (DDP), optional
-    ddp, ddp_rank, ddp_local_rank, ddp_world_size = get_dist_info()
-    if ddp:
-        device = torch.device("cuda", ddp_local_rank)
-        torch.cuda.set_device(device) # make "cuda" default to this device
-        dist.init_process_group(backend="nccl", device_id=device)
-        dist.barrier()
+        logger.info("MLX backend initialized (single device)")
+
+        return ddp, ddp_rank, ddp_local_rank, ddp_world_size, device
+
     else:
-        device = torch.device("cuda")
+        # PyTorch backend (CUDA)
+        # CUDA is currently required
+        assert torch.cuda.is_available(), "CUDA is needed for PyTorch backend"
 
-    if ddp_rank == 0:
-        logger.info(f"Distributed world size: {ddp_world_size}")
+        # Reproducibility
+        torch.manual_seed(42)
+        torch.cuda.manual_seed(42)
+        # skipping full reproducibility for now, possibly investigate slowdown later
+        # torch.use_deterministic_algorithms(True)
+        # torch.backends.cudnn.deterministic = True
+        # torch.backends.cudnn.benchmark = False
 
-    return ddp, ddp_rank, ddp_local_rank, ddp_world_size, device
+        # Precision
+        torch.set_float32_matmul_precision("high") # uses tf32 instead of fp32 for matmuls
+
+        # Distributed setup: Distributed Data Parallel (DDP), optional
+        ddp, ddp_rank, ddp_local_rank, ddp_world_size = get_dist_info()
+        if ddp:
+            device = torch.device("cuda", ddp_local_rank)
+            torch.cuda.set_device(device) # make "cuda" default to this device
+            dist.init_process_group(backend="nccl", device_id=device)
+            dist.barrier()
+        else:
+            device = torch.device("cuda")
+
+        if ddp_rank == 0:
+            logger.info(f"Distributed world size: {ddp_world_size}")
+
+        return ddp, ddp_rank, ddp_local_rank, ddp_world_size, device
 
 def compute_cleanup():
     """Companion function to compute_init, to clean things up before script exit"""
-    if is_ddp():
+    if BACKEND == "pytorch" and is_ddp():
         dist.destroy_process_group()
 
 class DummyWandb:

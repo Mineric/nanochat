@@ -20,10 +20,15 @@ import os
 import itertools
 import re
 import wandb
-import torch
-import torch.distributed as dist
 
-from nanochat.common import compute_init, compute_cleanup, print0, get_base_dir, DummyWandb
+from nanochat.common import BACKEND, compute_init, compute_cleanup, print0, get_base_dir, DummyWandb
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+    dist = None
+else:
+    import torch
+    import torch.distributed as dist
 from nanochat.checkpoint_manager import save_checkpoint, load_model
 from nanochat.engine import Engine
 from tasks.gsm8k import GSM8K

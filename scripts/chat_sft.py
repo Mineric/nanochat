@@ -10,14 +10,18 @@ torchrun --standalone --nproc_per_node=8 -m scripts.chat_sft
 """
 
 import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import copy
-
 import wandb
-import torch
-import torch.distributed as dist
 
-from nanochat.common import compute_init, compute_cleanup, get_base_dir, print0, DummyWandb
+from nanochat.common import BACKEND, compute_init, compute_cleanup, get_base_dir, print0, DummyWandb
+
+if BACKEND == "pytorch":
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    import torch
+    import torch.distributed as dist
+else:
+    import nanochat.mlx_compat as torch
+    dist = None
 from nanochat.checkpoint_manager import load_model
 from nanochat.checkpoint_manager import save_checkpoint
 from nanochat.engine import Engine

@@ -11,10 +11,14 @@ torchrun --nproc_per_node=8 -m scripts.chat_eval -- -a ARC-Easy
 import argparse
 from functools import partial
 
-import torch
-import torch.distributed as dist
+from nanochat.common import BACKEND, compute_init, compute_cleanup, get_dist_info, print0
 
-from nanochat.common import compute_init, compute_cleanup, get_dist_info, print0
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+    dist = None
+else:
+    import torch
+    import torch.distributed as dist
 from nanochat.checkpoint_manager import load_model
 from nanochat.engine import Engine
 
