@@ -8,7 +8,6 @@ Then open http://localhost:8000 in your browser.
 import argparse
 import json
 import os
-import torch
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,7 +15,12 @@ from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
 from pydantic import BaseModel
 from typing import List, Optional, AsyncGenerator
 
-from nanochat.common import compute_init
+from nanochat.common import BACKEND, compute_init
+
+if BACKEND == "mlx":
+    import nanochat.mlx_compat as torch
+else:
+    import torch
 from nanochat.checkpoint_manager import load_model
 from nanochat.engine import Engine
 

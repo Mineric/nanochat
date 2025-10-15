@@ -20,15 +20,16 @@ from nanochat.common import BACKEND
 if BACKEND == "pytorch":
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     import torch
+    import torch.distributed as dist
 else:
     import nanochat.mlx_compat as torch
+    dist = None
 
 from nanochat.common import compute_init, compute_cleanup, print0, DummyWandb, get_base_dir
 from nanochat.tokenizer import get_token_bytes
 from nanochat.checkpoint_manager import save_checkpoint
 from nanochat.loss_eval import evaluate_bpb
 from nanochat.checkpoint_manager import load_model
-import torch.distributed as dist
 
 from tasks.common import TaskMixture
 from tasks.gsm8k import GSM8K
@@ -179,7 +180,7 @@ while True:
     flops_so_far = num_flops_per_token * total_batch_size * step
 
     # Synchronize last_step across all ranks to avoid hangs in the distributed setting
-    if ddp:
+    if ddp and BACKEND != "mlx":
         last_step_tensor = torch.tensor(last_step, dtype=torch.int32, device=device)
         dist.all_reduce(last_step_tensor, op=dist.ReduceOp.MAX)
         last_step = bool(last_step_tensor.item())

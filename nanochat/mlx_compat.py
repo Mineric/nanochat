@@ -1100,6 +1100,56 @@ class nn:
             return tensor
 
 # ============================================================================
+# Serialization functions
+# ============================================================================
+
+def save(obj, f):
+    """Save a tensor or dict of tensors using pickle (compatible with PyTorch)."""
+    import pickle
+
+    def convert_to_numpy(obj):
+        """Recursively convert Tensors to numpy arrays for pickling."""
+        if isinstance(obj, Tensor):
+            return np.array(obj.data)
+        elif isinstance(obj, dict):
+            return {k: convert_to_numpy(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return type(obj)(convert_to_numpy(item) for item in obj)
+        else:
+            return obj
+
+    serializable_obj = convert_to_numpy(obj)
+
+    if isinstance(f, str):
+        with open(f, 'wb') as file:
+            pickle.dump(serializable_obj, file)
+    else:
+        pickle.dump(serializable_obj, f)
+
+def load(f, map_location=None):
+    """Load a tensor or dict of tensors from pickle (compatible with PyTorch)."""
+    import pickle
+
+    def convert_to_tensor(obj):
+        """Recursively convert numpy arrays back to Tensors."""
+        if isinstance(obj, np.ndarray):
+            return Tensor(obj)
+        elif isinstance(obj, dict):
+            return {k: convert_to_tensor(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return type(obj)(convert_to_tensor(item) for item in obj)
+        else:
+            return obj
+
+    if isinstance(f, str):
+        with open(f, 'rb') as file:
+            obj = pickle.load(file)
+    else:
+        obj = pickle.load(f)
+
+    return convert_to_tensor(obj)
+
+# ============================================================================
 # Export public API
 # ============================================================================
 
@@ -1113,4 +1163,5 @@ __all__ = [
     'device', 'cuda', 'backends', 'distributed',
     'Generator', 'manual_seed', 'compile', 'inference_mode', 'no_grad',
     'float32', 'bfloat16', 'int32', 'int64', 'long',
+    'save', 'load',
 ]
